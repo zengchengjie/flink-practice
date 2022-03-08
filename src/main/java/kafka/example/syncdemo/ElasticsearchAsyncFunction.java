@@ -1,4 +1,4 @@
-package kafka.example;
+package kafka.example.syncdemo;
 
 
 import com.alibaba.fastjson.JSON;

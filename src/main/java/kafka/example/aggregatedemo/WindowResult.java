@@ -1,4 +1,4 @@
-package kafka.example.test1;
+package kafka.example.aggregatedemo;
 
 
 import org.apache.flink.api.java.tuple.Tuple;

@@ -2,25 +2,22 @@ package kafka.model;
 
 import com.alibaba.fastjson.annotation.JSONField;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Date;
 
+@NoArgsConstructor
 @Data
 public class TrafficMessage {
-    public TrafficMessage() {
-    }
-
     private Metric.LabelsDTO labels;
     private String name;
     @JSONField(format = "yyyy-MM-dd HH:mm:ss")
     private Date timestamp;
     private Long value;
 
+    @NoArgsConstructor
     @Data
     public static class LabelsDTO {
-        public LabelsDTO() {
-        }
-
         private String name;
         private String business;
         private String city;

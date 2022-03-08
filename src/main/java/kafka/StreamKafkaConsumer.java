@@ -57,7 +57,7 @@ public class StreamKafkaConsumer {
             }
         });
 //        consumer.setStartFromEarliest();//从最早的开始消费
-//        consumer.setStartFromLatest();//从最晚的开始消费
+        consumer.setStartFromLatest();//从最晚的开始消费
 //        consumer.setStartFromTimestamp(1645691447749L);//从特定的时间戳开始消费
 //        consumer.setStartFromGroupOffsets();//默认行为，从消费者组（消费者属性中的设置）开始读取group.idKafka 代理
         // （或 Kafka 0.8 的 Zookeeper）中提交的偏移量的分区。如果找不到分区的偏移量，auto.offset.reset将使用属性中的设置。
@@ -71,13 +71,13 @@ public class StreamKafkaConsumer {
         env.addSource(consumer)
                 .flatMap(new Splitter())
                 //以用户名为key
-//                .keyBy(0)
-                .keyBy(String.valueOf(new KeySelector<TrafficMessage, Tuple2<String, Long>>() {
-                    @Override
-                    public Tuple2<String, Long> getKey(TrafficMessage trafficMessage) throws Exception {
-                        return Tuple2.of(trafficMessage.getLabels().getBusiness(), trafficMessage.getValue());
-                    }
-                }))
+                .keyBy(0)
+//                .keyBy(String.valueOf(new KeySelector<TrafficMessage, Tuple2<String, Long>>() {
+//                    @Override
+//                    public Tuple2<String, Long> getKey(TrafficMessage trafficMessage) throws Exception {
+//                        return Tuple2.of(trafficMessage.getLabels().getBusiness(), trafficMessage.getValue());
+//                    }
+//                }))
                 //时间窗口为10秒
                 .timeWindow(Time.seconds(5))
                 //将每个用户的流量总数累加起来
@@ -97,7 +97,9 @@ public class StreamKafkaConsumer {
 
             if (null != trafficMessage) {
 //                collector.collect(new Tuple2<>(trafficMessage.getLabels().getSn(), trafficMessage.getValue()));
-                collector.collect(new Tuple2<>(trafficMessage.getLabels().getSn(), trafficMessage.getValue()));
+                collector.collect(new Tuple2<>(trafficMessage.getLabels().getIsp(), trafficMessage.getValue()));
+                collector.collect(new Tuple2<>(trafficMessage.getLabels().getBusiness(), trafficMessage.getValue()));
+                collector.collect(new Tuple2<>(trafficMessage.getLabels().getUid(), trafficMessage.getValue()));
             }
         }
     }
