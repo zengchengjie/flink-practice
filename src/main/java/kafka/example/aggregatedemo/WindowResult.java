@@ -1,6 +1,5 @@
 package kafka.example.aggregatedemo;
 
-
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple3;
