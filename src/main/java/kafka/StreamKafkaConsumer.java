@@ -4,13 +4,19 @@ import kafka.model.TrafficMessage;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.watermark.Watermark;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
+import org.apache.flink.streaming.connectors.redis.RedisSink;
+import org.apache.flink.streaming.connectors.redis.common.config.FlinkJedisPoolConfig;
+import org.apache.flink.streaming.connectors.redis.common.mapper.RedisCommand;
+import org.apache.flink.streaming.connectors.redis.common.mapper.RedisCommandDescription;
+import org.apache.flink.streaming.connectors.redis.common.mapper.RedisMapper;
 import org.apache.flink.util.Collector;
 
 import javax.annotation.Nullable;
@@ -62,7 +68,9 @@ public class StreamKafkaConsumer {
         env.addSource(consumer)
                 .flatMap(new Splitter())
                 //以用户名为key
-                .keyBy(0)
+//                .keyBy(0,1)
+                .keyBy(0).keyBy(1)
+//                .keyBy("business","isp")
 //                .keyBy(String.valueOf(new KeySelector<TrafficMessage, Tuple2<String, Long>>() {
 //                    @Override
 //                    public Tuple2<String, Long> getKey(TrafficMessage trafficMessage) throws Exception {
@@ -70,27 +78,29 @@ public class StreamKafkaConsumer {
 //                    }
 //                }))
                 //时间窗口为10秒
-                .timeWindow(Time.seconds(5))
+//                .timeWindow(Time.seconds(10))
+                .window(TumblingProcessingTimeWindows.of(Time.seconds(10)))//滑动时间窗口，自然时间的十秒一个点
                 //将每个用户的流量总数累加起来
-                .sum(1)
+                .sum(2)
 //                .apply()
                 //输出方式是STDOUT
 //                .returns(Types.TUPLE(Types.INT,Types.INT))
-                .print();
+//                .print();
+                .addSink(generateRedisSink());
 
         env.execute("Flink-Kafka demo");
     }
 
-    public static class Splitter implements FlatMapFunction<String, Tuple2<String, Long>> {
+    public static class Splitter implements FlatMapFunction<String, Tuple3<String, String, Long>> {
         @Override
-        public void flatMap(String s, Collector<Tuple2<String, Long>> collector) throws Exception {
+        public void flatMap(String s, Collector<Tuple3<String, String, Long>> collector) throws Exception {
             TrafficMessage trafficMessage = JSONHelper.parseTraffic(s);
 
             if (null != trafficMessage) {
 //                collector.collect(new Tuple2<>(trafficMessage.getLabels().getSn(), trafficMessage.getValue()));
-                collector.collect(new Tuple2<>(trafficMessage.getLabels().getIsp(), trafficMessage.getValue()));
-                collector.collect(new Tuple2<>(trafficMessage.getLabels().getBusiness(), trafficMessage.getValue()));
-                collector.collect(new Tuple2<>(trafficMessage.getLabels().getUid(), trafficMessage.getValue()));
+                collector.collect(new Tuple3<String, String, Long>(trafficMessage.getLabels().getIsp(), trafficMessage.getLabels().getBusiness(), trafficMessage.getValue()));
+//                collector.collect(new Tuple2<>(trafficMessage.getLabels().getBusiness(), trafficMessage.getValue()));
+//                collector.collect(new Tuple2<>(trafficMessage.getLabels().getUid(), trafficMessage.getValue()));
             }
         }
     }
@@ -101,4 +111,51 @@ public class StreamKafkaConsumer {
             return null;
         }
     }
+
+    /**
+     * 生成RedisSink
+     */
+    private static RedisSink<Tuple3<String, String, Long>> generateRedisSink() {
+        // Redis配置
+        FlinkJedisPoolConfig config = new FlinkJedisPoolConfig.Builder()
+                .setMaxTotal(8) // 最大实例总数
+                .setMaxIdle(4) // 实例最多空闲数
+                .setMinIdle(2)
+                .setDatabase(1)
+                .setHost("192.168.10.33")
+                .setPort(6381)
+                .setPassword("sfahh38yrh32r289")
+                .build();
+        // Mapper
+        RedisMapper<Tuple3<String, String, Long>> redisMapper = new RedisMapper<Tuple3<String, String, Long>>() {
+            @Override
+            public RedisCommandDescription getCommandDescription() {
+//                // 定义保存数据到Redis的命令
+                return new RedisCommandDescription(
+                        RedisCommand.SET // 使用hset命令
+//                        tuple2.f0+tuple2.f1
+//                        "my_hash" // 表名
+                );
+            }
+
+            @Override
+            public String getKeyFromData(Tuple3<String, String, Long> tuple2) {
+                StringBuffer buffer = new StringBuffer();
+                buffer.append(tuple2.f0);
+                buffer.append("-");
+                buffer.append(tuple2.f1);
+                buffer.append(":");
+                buffer.append(System.currentTimeMillis());
+                return buffer.toString();
+            }
+
+            @Override
+            public String getValueFromData(Tuple3<String, String, Long> tuple2) {
+                return tuple2.f2.toString();
+            }
+        };
+
+        return new RedisSink<>(config, redisMapper);
+    }
+
 }
